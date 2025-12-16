@@ -88,20 +88,20 @@ pipeline {
                     docker stop ${CONTAINER_NAME} || true
                     docker rm ${CONTAINER_NAME} || true
 
-                    # Run new container
+                    # Run new container (using port 5001 to avoid macOS AirPlay conflict)
                     docker run -d \
                         --name ${CONTAINER_NAME} \
-                        -p 5000:5000 \
+                        -p 5001:5000 \
                         ${APP_NAME}:latest
 
                     # Wait for container to start
                     sleep 5
 
-                    # Health check
-                    curl -f http://localhost:5000/ || exit 1
+                    # Health check (using host.docker.internal to reach host from Jenkins container)
+                    curl -f http://host.docker.internal:5001/ || exit 1
 
                     echo '✅ Application deployed successfully!'
-                    echo '🌐 Access the API at: http://localhost:5000'
+                    echo '🌐 Access the API at: http://localhost:5001'
                 '''
             }
         }
