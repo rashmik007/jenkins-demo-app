@@ -91,4 +91,3 @@ class TestUtilityFunctions:
         """Test multiply_numbers with floats"""
         result = multiply_numbers(2.5, 4.0)
         assert result == 10.0
-
