@@ -1,10 +1,33 @@
+@Library('jenkins-shared-library@v1') _
+
+/**
+ * Demo Flask API - CI/CD Pipeline
+ * 
+ * Uses jenkins-shared-library for reusable pipeline steps.
+ * Branch logic is defined here; execution steps are in the library.
+ * 
+ * Branch behavior:
+ *   - main/master: Full pipeline (lint → test → build → deploy)
+ *   - release/*:   Lint → test → build (no deploy)
+ *   - feature/*:   Lint → test only
+ *   - All others:  Lint → test only
+ */
+
 pipeline {
     agent any
 
     environment {
         APP_NAME = 'demo-flask-api'
-        DOCKER_IMAGE = "demo-flask-api:${BUILD_NUMBER}"
         CONTAINER_NAME = 'demo-flask-app'
+        HOST_PORT = '5001'
+        CONTAINER_PORT = '5000'
+    }
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timestamps()
+        timeout(time: 30, unit: 'MINUTES')
+        disableConcurrentBuilds()
     }
 
     stages {
@@ -19,17 +42,13 @@ pipeline {
         }
 
         // ============================================
-        // Stage 2: Install Dependencies
+        // Stage 2: Setup Python Environment
         // ============================================
-        stage('Install Dependencies') {
+        stage('Setup') {
             steps {
-                echo '📦 Setting up Python virtual environment...'
-                sh '''
-                    python3 -m venv venv
-                    . venv/bin/activate
-                    pip install --upgrade pip
-                    pip install -r requirements.txt
-                '''
+                pythonSetup(
+                    requirementsFile: 'requirements.txt'
+                )
             }
         }
 
@@ -38,11 +57,10 @@ pipeline {
         // ============================================
         stage('Lint') {
             steps {
-                echo '🔍 Running flake8 linter...'
-                sh '''
-                    . venv/bin/activate
-                    flake8 app/ --count --show-source --statistics
-                '''
+                pythonLint(
+                    targetDirs: ['app/'],
+                    failOnError: true
+                )
             }
         }
 
@@ -51,58 +69,59 @@ pipeline {
         // ============================================
         stage('Test') {
             steps {
-                echo '🧪 Running pytest with coverage...'
-                sh '''
-                    . venv/bin/activate
-                    pytest tests/ -v --cov=app --cov-report=term-missing --cov-report=html
-                '''
-            }
-            post {
-                always {
-                    echo '📊 Test stage completed'
-                }
+                pythonTest(
+                    testDir: 'tests/',
+                    coverageSource: 'app',
+                    junitReport: true,
+                    htmlReport: true
+                )
             }
         }
 
         // ============================================
         // Stage 5: Build Docker Image
+        // Branch rule: Only on main, master, or release/*
         // ============================================
         stage('Build Docker Image') {
+            when {
+                anyOf {
+                    branch 'main'
+                    branch 'master'
+                    branch 'release/*'
+                }
+            }
             steps {
-                echo '🐳 Building Docker image...'
-                sh '''
-                    docker build -t ${DOCKER_IMAGE} .
-                    docker tag ${DOCKER_IMAGE} ${APP_NAME}:latest
-                '''
+                script {
+                    def image = dockerBuild(
+                        imageName: env.APP_NAME,
+                        additionalTags: ['latest']
+                    )
+                    echo "Built image: ${image}"
+                }
             }
         }
 
         // ============================================
         // Stage 6: Deploy
+        // Branch rule: Only on main or master
         // ============================================
         stage('Deploy') {
+            when {
+                anyOf {
+                    branch 'main'
+                    branch 'master'
+                }
+            }
             steps {
-                echo '🚀 Deploying application...'
-                sh '''
-                    # Stop and remove existing container if running
-                    docker stop ${CONTAINER_NAME} || true
-                    docker rm ${CONTAINER_NAME} || true
-
-                    # Run new container (using port 5001 to avoid macOS AirPlay conflict)
-                    docker run -d \
-                        --name ${CONTAINER_NAME} \
-                        -p 5001:5000 \
-                        ${APP_NAME}:latest
-
-                    # Wait for container to start
-                    sleep 5
-
-                    # Health check (using host.docker.internal to reach host from Jenkins container)
-                    curl -f http://host.docker.internal:5001/ || exit 1
-
-                    echo '✅ Application deployed successfully!'
-                    echo '🌐 Access the API at: http://localhost:5001'
-                '''
+                dockerDeploy(
+                    imageName: "${APP_NAME}:latest",
+                    containerName: env.CONTAINER_NAME,
+                    hostPort: env.HOST_PORT,
+                    containerPort: env.CONTAINER_PORT,
+                    healthCheckUrl: "http://host.docker.internal:${HOST_PORT}/",
+                    healthCheckRetries: 3,
+                    healthCheckDelay: 5
+                )
             }
         }
     }
@@ -111,24 +130,24 @@ pipeline {
     // Post-build Actions
     // ============================================
     post {
+        started {
+            pipelineNotify(status: 'STARTED')
+        }
         success {
-            echo '''
-            ✅ ========================================
-            ✅ Pipeline completed successfully!
-            ✅ ========================================
-            '''
+            pipelineNotify(status: 'SUCCESS')
         }
         failure {
-            echo '''
-            ❌ ========================================
-            ❌ Pipeline failed! Check the logs above.
-            ❌ ========================================
-            '''
+            pipelineNotify(status: 'FAILURE')
+        }
+        aborted {
+            pipelineNotify(status: 'ABORTED')
         }
         always {
-            echo 'Cleaning up workspace...'
-            sh 'rm -rf venv || true'
+            cleanupWorkspace(
+                deleteVenv: true,
+                deleteCoverage: true,
+                deleteTestResults: true
+            )
         }
     }
 }
-
