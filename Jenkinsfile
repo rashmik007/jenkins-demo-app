@@ -130,9 +130,6 @@ pipeline {
     // Post-build Actions
     // ============================================
     post {
-        started {
-            pipelineNotify(status: 'STARTED')
-        }
         success {
             pipelineNotify(status: 'SUCCESS')
         }
