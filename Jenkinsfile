@@ -28,7 +28,7 @@ pipeline {
 
        
         stage('Setup') {
-            steps {                                           // Setup Python environment
+            steps {                                          
                 pythonSetup(
                     requirementsFile: 'requirements.txt'
                 )
