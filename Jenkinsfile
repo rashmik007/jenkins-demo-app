@@ -20,7 +20,7 @@ pipeline {
     stages {
       
         stage('Checkout') {
-            steps {                                           // Checkout source code
+            steps {                                           
                 echo '📥 Checking out source code...'
                 checkout scm
             }
