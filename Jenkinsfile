@@ -1,18 +1,5 @@
 @Library('jenkins-shared-library@v1') _
 
-/**
- * Demo Flask API - CI/CD Pipeline
- * 
- * Uses jenkins-shared-library for reusable pipeline steps.
- * Branch logic is defined here; execution steps are in the library.
- * 
- * Branch behavior:
- *   - main/master: Full pipeline (lint → test → build → deploy)
- *   - release/*:   Lint → test → build (no deploy)
- *   - feature/*:   Lint → test only
- *   - All others:  Lint → test only
- */
-
 pipeline {
     agent any
 
@@ -31,32 +18,26 @@ pipeline {
     }
 
     stages {
-        // ============================================
-        // Stage 1: Checkout Code
-        // ============================================
+      
         stage('Checkout') {
-            steps {
+            steps {                                           // Checkout source code
                 echo '📥 Checking out source code...'
                 checkout scm
             }
         }
 
-        // ============================================
-        // Stage 2: Setup Python Environment
-        // ============================================
+       
         stage('Setup') {
-            steps {
+            steps {                                           // Setup Python environment
                 pythonSetup(
                     requirementsFile: 'requirements.txt'
                 )
             }
         }
 
-        // ============================================
-        // Stage 3: Code Quality - Linting
-        // ============================================
+        
         stage('Lint') {
-            steps {
+            steps {                                           // Lint code
                 pythonLint(
                     targetDirs: ['app/'],
                     failOnError: true
@@ -64,30 +45,25 @@ pipeline {
             }
         }
 
-        // ============================================
-        // Stage 4: Run Tests
-        // ============================================
+        
         stage('Test') {
-            steps {
+            steps {                                           // Run tests
                 pythonTest(
                     testDir: 'tests/',
                     coverageSource: 'app',
-                    junitReport: true,
+                    junitReport: true,              
                     htmlReport: true
                 )
             }
         }
 
-        // ============================================
-        // Stage 5: Build Docker Image
-        // Branch rule: Only on main, master, or release/*
-        // ============================================
+        
         stage('Build Docker Image') {
             when {
                 anyOf {
                     branch 'main'
                     branch 'master'
-                    branch 'release/*'
+                    branch 'release/*'                          // Build on main, master, or release branches
                 }
             }
             steps {
@@ -101,14 +77,11 @@ pipeline {
             }
         }
 
-        // ============================================
-        // Stage 6: Deploy
-        // Branch rule: Only on main or master
-        // ============================================
+        
         stage('Deploy') {
             when {
                 anyOf {
-                    branch 'main'
+                    branch 'main'                               // Deploy to main or master
                     branch 'master'
                 }
             }
@@ -126,14 +99,12 @@ pipeline {
         }
     }
 
-    // ============================================
-    // Post-build Actions
-    // ============================================
+
     post {
         success {
             pipelineNotify(status: 'SUCCESS')
         }
-        failure {
+        failure {                                           // Post-build actions
             pipelineNotify(status: 'FAILURE')
         }
         aborted {
@@ -149,4 +120,4 @@ pipeline {
     }
 }
 
-// Full webhook test: Wed Dec 17 12:28:24 CST 2025
+

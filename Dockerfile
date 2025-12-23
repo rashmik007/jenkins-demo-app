@@ -1,7 +1,3 @@
-# ============================================
-# Demo Flask API - Dockerfile
-# ============================================
-
 # Stage 1: Use official Python slim image
 FROM python:3.11-slim
 
